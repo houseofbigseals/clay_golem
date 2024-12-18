@@ -199,28 +199,29 @@
         $(this).tab('show');
     });
 
-    function sendExperimentCommand() {
-        const command = document.getElementById('command-select').value;
-        const args = document.getElementById('command-args').value;
+    function sendExperimentCommand(task_name) {
+        task_postfix = task_name.replace(':', '-')
+        const command = document.getElementById('command-select'+task_postfix).value;
+        const args = document.getElementById('command-args'+task_postfix).value;
 
         $.ajax({
             url: '/handle-experiment',
             type: 'POST',
             contentType: 'application/json',
-            data: JSON.stringify({ command: command, args: args }),
+            data: JSON.stringify({ command: command, args: args, task_name: task_name }),
             success: function(response) {
                 // Обновляем статус и время последнего обновления
-                const experimentStatusElement = document.getElementById('experiment-status');
+                const experimentStatusElement = document.getElementById('experiment-status'+task_postfix);
                 if (experimentStatusElement) {
                     experimentStatusElement.innerText = response.status;
                 } else {
                     console.error('Element with id "experiment-status" not found.');
                 }
-                document.getElementById('last-update').innerText = new Date().toLocaleString();
+                document.getElementById('last-update'+task_postfix).innerText = new Date().toLocaleString();
                 // document.getElementById('ventilation-task-data').innerText = JSON.stringify(response.task_data, null, 2); // Отображаем данные о задаче
 
                 // Обновляем прогресс-бар
-                const progressBar = document.getElementById('progress-bar');
+                const progressBar = document.getElementById('progress-bar'+task_postfix);
                 if (progressBar) {
                     const step = response.task_data.params.step; // Извлекаем значение step
                     const progressPercentage = (step / 4) * 100; // Предположим, что максимальный шаг 4
@@ -230,6 +231,13 @@
                 } else {
                     console.error('Element with id "progress-bar" not found.');
                 }
+
+                // Обновляем параметры в модальном окне
+                const paramsTable = $(`#paramsTable${task_postfix} tbody`);
+                paramsTable.empty(); // Очищаем существующие строки
+                $.each(response.task_data.params, function(param, value) {
+                    paramsTable.append(`<tr><td>${param}</td><td>${value}</td></tr>`);
+                });
 
                 createAlert(`Команда "${command}" успешно отправлена.`, 'success');
             },
