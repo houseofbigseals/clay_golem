@@ -13,6 +13,17 @@ def init_hardware(app_context, mode="test"):
     """
 
     print(f"INIT HARDWARE with mode {mode}")
+    # if mode == "test":
+    if mode == "production":
+        lamp_2_ip = "10.10.0.14"
+        relay_5_ip = "10.10.0.18"
+        relay_1_ip = "10.10.0.5"
+        relay_2_ip = "10.10.0.6"
+        relay_3_ip = "10.10.0.7"
+        relay_4_ip = "10.10.0.8"
+        lamp_0_ip = "10.10.0.15"
+        lamp_1_ip = "10.10.0.16"
+
     if mode == "test":
         lamp_2_ip = "10.10.0.14"
         relay_5_ip = "10.10.0.18"
@@ -23,7 +34,7 @@ def init_hardware(app_context, mode="test"):
         lamp_0_ip = "10.10.0.15"
         lamp_1_ip = "10.10.0.16"
 
-    elif mode == "production":
+    elif mode == "local":
         # will use mdns names in hope that it make requests more fast
         lamp_2_ip = "10.10.0.14"  # still remote
         relay_5_ip = "10.10.0.18"  # still remote
