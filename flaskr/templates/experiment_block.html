@@ -1,13 +1,14 @@
 <div class="container">
+    {% set device_name = device.params.name | replace(':', '-') %}
     <h2>{{ device.params.name }}</h2>
     <div class="alert alert-info" role="alert">
-        <strong>Статус:</strong> <span id="experiment-status">{{ device.params.status }}</span> |
-        <strong>Последнее обновление:</strong> <span id="last-update">{{ device.params.last_response }}</span>
+        <strong>Статус:</strong> <span id="experiment-status{{ device_name }}">{{ device.params.status }}</span> |
+        <strong>Последнее обновление:</strong> <span id="last-update{{ device_name }}">{{ device.params.last_response }}</span>
     </div>
     
     <div class="mb-3">
         <label for="command-select" class="form-label">Команды</label>
-        <select id="command-select" class="form-select">
+        <select id="command-select{{ device_name }}" class="form-select">
             {% for command in device.commands.keys() %}
                 <option value="{{ command }}">{{ command }}</option>
             {% endfor %}
@@ -16,16 +17,16 @@
     
     <div class="mb-3">
         <label for="command-args" class="form-label">Аргументы</label>
-        <input type="text" id="command-args" class="form-control" placeholder="Введите аргументы">
+        <input type="text" id="command-args{{ device_name }}" class="form-control" placeholder="Введите аргументы">
     </div>
     
-    <button type="button" class="btn btn-primary" onclick="sendExperimentCommand()">Отправить команду</button>
+    <button type="button" class="btn btn-primary" onclick="sendExperimentCommand('{{ device.params.name }}')">Отправить команду</button>
     
     <div class="progress mt-3">
         {% set total_stages = device.stages | length %}
         {% set progress_percentage = (device.params.step / (total_stages - 1)) * 100 if total_stages > 1 else 100 %}
         
-        <div id="progress-bar" class="progress-bar" role="progressbar" style="width: {{ progress_percentage }}%;" aria-valuenow="{{ progress_percentage }}" aria-valuemin="0" aria-valuemax="100">
+        <div id="progress-bar{{ device_name }}" class="progress-bar" role="progressbar" style="width: {{ progress_percentage }}%;" aria-valuenow="{{ progress_percentage }}" aria-valuemin="0" aria-valuemax="100">
             Шаг {{ device.params.step }}/{{ total_stages }} - {{ device.params.current_stage_name }}
         </div>
     </div>
@@ -36,7 +37,7 @@
     </button>
 
     <!-- Модальное окно с параметрами -->
-    <div class="modal fade" id="paramsModal{{ device.params.name | replace(':', '-') }}" tabindex="-1" aria-labelledby="paramsModalLabel" aria-hidden="true">
+    <div class="modal fade" id="paramsModal{{ device_name }}" tabindex="-1" aria-labelledby="paramsModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -44,7 +45,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <table class="table">
+                    <table class="table" id="paramsTable{{ device_name }}">
                         <thead>
                             <tr>
                                 <th>Параметр</th>
