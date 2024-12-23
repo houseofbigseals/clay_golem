@@ -23,6 +23,8 @@ function updateDeviceValues() {
         dataType: 'json', // Expect JSON data in response
         success: function(devices) {
             devices.forEach(handleDeviceUpdate);
+            devices.filter(device => device.params.type === 'task')
+                .forEach(handleExperimentUpdate)
         },
         error: function(xhr, status, error) {
             console.error("Error fetching device updates:", status, error);
@@ -36,23 +38,31 @@ $('#myTab a').on('click', function (e) {
     $(this).tab('show');
 });
 
-function handleDeviceUpdate() {
-        // Update parameters and data for each device
-        // Assuming the device ID is unique and can be used to target the elements
-        $(`#device${device.params.device_id}_status_indicator`).text(device.params.status);
-        $(`#device${device.params.device_id}_last_response`).text(device.params.last_time_active);
+function handleDeviceUpdate(device) {
+    // Update parameters and data for each device
+    // Assuming the device ID is unique and can be used to target the elements
+    $(`#device${device.params.device_id}_status_indicator`).text(device.params.status);
+    $(`#device${device.params.device_id}_last_response`).text(device.params.last_time_active);
 
-        // Update status class based on the device status
-        const statusClass = device.params.status === 'ok' ? 'status-ok' : 'status-error';
-        $(`#device${device.params.device_id}_status_indicator`)
-            .removeClass('status-ok status-error')
-            .addClass(statusClass);
+    // Update status class based on the device status
+    const statusClass = device.params.status === 'ok' ? 'status-ok' : 'status-error';
+    $(`#device${device.params.device_id}_status_indicator`)
+        .removeClass('status-ok status-error')
+        .addClass(statusClass);
 
-        // Update Parameters Table
-        updateParamsTable(device);
+    // Update Parameters Table
+    updateParamsTable(device);
 
-        // Update Data Table
-        updateDataTable(device);
+    // Update Data Table
+    updateDataTable(device);
+
+}
+
+function handleExperimentUpdate(task){
+    // Обновляем прогресс-бар
+    updateProgressBar(task);
+    updateExperimentParamsTable(task)
+    updateExperimentStatus(task)
 }
 
 function updateDataTable(device) {
@@ -69,6 +79,44 @@ function updateParamsTable(device) {
     $.each(device.params, function (param, value) {
         paramsTable.append(`<tr><td>${param}</td><td>${value}</td></tr>`);
     });
+}
+
+function updateProgressBar(device) {
+    if(device.params.type == "task"){
+        task_postfix = device.params.name.replace(':', '-')
+        const progressBar = document.getElementById('progress-bar'+task_postfix);
+        if (progressBar) {
+            const totalStages = Object.keys(device.stages).length;
+            const step = device.params.step;; // Извлекаем значение step
+            const progressPercentage = (step / totalStages) * 100; // Предположим, что максимальный шаг 4
+            progressBar.style.width = progressPercentage + '%';
+            progressBar.setAttribute('aria-valuenow', progressPercentage);
+            progressBar.innerText = Math.round(progressPercentage) + '%'; // Обновляем текст прогресс-бара
+        } else {
+            console.error('Element with id "progress-bar${task_postfix}" not found.');
+        }
+    }
+}
+
+function updateExperimentParamsTable(task){
+        // Обновляем параметры в модальном окне
+        task_postfix = task.params.name.replace(':', '-')
+        const paramsTable = $(`#paramsTable${task_postfix} tbody`);
+        paramsTable.empty(); // Очищаем существующие строки
+        $.each(task.params, function(param, value) {
+            paramsTable.append(`<tr><td>${param}</td><td>${value}</td></tr>`);
+        });
+}
+
+function updateExperimentStatus(task){
+    task_postfix = task.params.name.replace(':', '-')
+    const experimentStatusElement = document.getElementById('experiment-status'+task_postfix);
+    if (experimentStatusElement) {
+        experimentStatusElement.innerText = task.params.status;
+    } else {
+        console.error('Element with id "experiment-status" not found.');
+    }
+    document.getElementById('last-update'+task_postfix).innerText = task.params.last_response;
 }
 
 function sendExperimentCommand(task_name) {
@@ -186,7 +234,6 @@ function createAlert(message, type) {
         $(`#${uniqueId}`).alert('close');
     }, 2000); // Close the alert after 5 seconds
 }
-
 
 // Call the ajax polling for update every X milliseconds.
 setInterval(updateDeviceValues, 1000);
