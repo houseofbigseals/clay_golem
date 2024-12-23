@@ -612,7 +612,7 @@ class HardwareSBA5(Hardware):
         except Exception as e:
             self.driver = None
             self.params["status"] = "Not connected"
-            self.logger.error(str(e), exc_info=True)
+            self.logger.warning(str(e), exc_info=True)  # reduce that error to warning
 
     @classmethod
     def from_redis(cls, redis_client: redis.Redis, device_id: int):
