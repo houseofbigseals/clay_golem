@@ -8,10 +8,52 @@ from typing import Any
 
 
 
-def init_hardware(app_context):
+def init_hardware(app_context, mode="test"):
     """
     """
-    print("INIT HARDWARE")
+
+    print(f"INIT HARDWARE with mode {mode}")
+    # if mode == "test":
+    if mode == "production":
+        lamp_2_ip = "10.10.0.14"
+        relay_5_ip = "10.10.0.18"
+        relay_1_ip = "10.10.0.5"
+        relay_2_ip = "10.10.0.6"
+        relay_3_ip = "10.10.0.7"
+        relay_4_ip = "10.10.0.8"
+        lamp_0_ip = "10.10.0.15"
+        lamp_1_ip = "10.10.0.16"
+
+    if mode == "test":
+        lamp_2_ip = "10.10.0.14"
+        relay_5_ip = "10.10.0.18"
+        relay_1_ip = "10.10.0.5"
+        relay_2_ip = "10.10.0.6"
+        relay_3_ip = "10.10.0.7"
+        relay_4_ip = "10.10.0.8"
+        lamp_0_ip = "10.10.0.15"
+        lamp_1_ip = "10.10.0.16"
+
+    elif mode == "local":
+        # will use mdns names in hope that it make requests more fast
+        lamp_2_ip = "10.10.0.14"  # still remote
+        relay_5_ip = "10.10.0.18"  # still remote
+        relay_1_ip = "esp32_relay_1.local"
+        relay_2_ip = "esp32_relay_2.local"
+        relay_3_ip = "esp32_relay_3.local"
+        relay_4_ip = "esp32_relay_4.local"
+        lamp_0_ip = "esp32_pwm_lamp_0.local"
+        lamp_1_ip = "esp32_pwm_lamp_1.local"
+    else:
+        lamp_2_ip = "10.10.0.14"
+        relay_5_ip = "10.10.0.18"
+        relay_1_ip = "10.10.0.5"
+        relay_2_ip = "10.10.0.6"
+        relay_3_ip = "10.10.0.7"
+        relay_4_ip = "10.10.0.8"
+        lamp_0_ip = "10.10.0.15"
+        lamp_1_ip = "10.10.0.16"
+
     sba5_device = HardwareSBA5(
         device_id=99,
         name="SBA5_CO2_sensor"
@@ -20,31 +62,31 @@ def init_hardware(app_context):
     lamp0 = HardwareLamp(
         device_id=100,
         name="Lamp_0",
-        ip_addr="10.10.0.14"
+        ip_addr=lamp_2_ip
     )
     relay0 = HardwareRelay(
         device_id=101,
         name="Relay_0",
         channel=0,
-        ip_addr="10.10.0.18"
+        ip_addr= relay_5_ip
     )
     relay1 = HardwareRelay(
         device_id=102,
         name="Relay_1",
         channel=1,
-        ip_addr="10.10.0.18"
+        ip_addr=relay_5_ip
     )
     relay2 = HardwareRelay(
         device_id=103,
         name="Relay_2",
         channel=2,
-        ip_addr="10.10.0.18"
+        ip_addr=relay_5_ip
     )
     relay3 = HardwareRelay(
         device_id=104,
         name="Relay_3",
         channel=3,
-        ip_addr="10.10.0.18"
+        ip_addr=relay_5_ip
     )
     # exp sensors
     exp_ext_temp = HardwareSensorOnRelayBoard(
@@ -52,107 +94,107 @@ def init_hardware(app_context):
         name="exp_ext_temp",
         description="DHT11 temp outside experimental plants volume",
         family="ext_temp",
-        ip_addr="10.10.0.5"
+        ip_addr=relay_1_ip
     )
     exp_ext_hum = HardwareSensorOnRelayBoard(
         device_id=106,
         name="exp_ext_hum",
         description="DHT11 humidity outside experimental plants volume",
         family="ext_hum",
-        ip_addr="10.10.0.5"
+        ip_addr=relay_1_ip
     )
     exp_int_temp = HardwareSensorOnRelayBoard(
         device_id=107,
         name="exp_int_temp",
         description="DHT22 temp inside experimental plants volume",
         family="int_temp",
-        ip_addr="10.10.0.5"
+        ip_addr=relay_1_ip
     )
     exp_int_hum = HardwareSensorOnRelayBoard(
         device_id=108,
         name="exp_int_hum",
         description="DHT22 hum inside experimental plants volume",
         family="int_hum",
-        ip_addr="10.10.0.5"
+        ip_addr=relay_1_ip
     )
     exp_roots_temp = HardwareSensorOnRelayBoard(
         device_id=109,
         name="exp_roots_temp",
         description="DS18B20 temp inside experimental roots module",
         family="roots_temp",
-        ip_addr="10.10.0.5"
+        ip_addr=relay_1_ip
     )
     # exp relays
     exp_left_vent = HardwareRelay(
         device_id=110,
         name="Exp_vent_left",
         channel=0,
-        ip_addr="10.10.0.5"
+        ip_addr=relay_1_ip
     )
     exp_right_vent = HardwareRelay(
         device_id=111,
         name="Exp_vent_right",
         channel=1,
-        ip_addr="10.10.0.5"
+        ip_addr=relay_1_ip
     )
     exp_left_valve = HardwareRelay(
         device_id=112,
         name="Exp_valve_left",
         channel=2,
-        ip_addr="10.10.0.5"
+        ip_addr=relay_1_ip
     )
     exp_right_valve = HardwareRelay(
         device_id=113,
         name="Exp_valve_right",
         channel=3,
-        ip_addr="10.10.0.5"
+        ip_addr=relay_1_ip
     )
     co2_air_pump = HardwareRelay(
         device_id=114,
         name="CO2_air_pump",
         channel=2,
-        ip_addr="10.10.0.6"
+        ip_addr=relay_2_ip
     )
     co2_valve = HardwareRelay(
         device_id=115,
         name="CO2_valve",
         channel=3,
-        ip_addr="10.10.0.6"
+        ip_addr=relay_2_ip
     )
     exp_lamp = HardwareLamp(
         device_id=116,
         name="Exp_lamp",
-        ip_addr="10.10.0.15"
+        ip_addr=lamp_0_ip
     )
     # control relays and lamp
     control_lamp = HardwareLamp(
         device_id=117,
         name="Control_lamp",
-        ip_addr="10.10.0.16"
+        ip_addr=lamp_1_ip
     )
     control_left_vent = HardwareRelay(
         device_id=118,
         name="Control_vent_left",
         channel=0,
-        ip_addr="10.10.0.7"
+        ip_addr=relay_3_ip
     )
     control_right_vent = HardwareRelay(
         device_id=119,
         name="Control_vent_right",
         channel=1,
-        ip_addr="10.10.0.7"
+        ip_addr=relay_3_ip
     )
     control_left_valve = HardwareRelay(
         device_id=120,
         name="Control_valve_left",
         channel=2,
-        ip_addr="10.10.0.7"
+        ip_addr=relay_3_ip
     )
     control_right_valve = HardwareRelay(
         device_id=121,
         name="Control_valve_right",
         channel=3,
-        ip_addr="10.10.0.7"
+        ip_addr=relay_3_ip
     )
     # control sensors
     control_int_temp = HardwareSensorOnRelayBoard(
@@ -160,21 +202,21 @@ def init_hardware(app_context):
         name="control_int_temp",
         description="DHT22 temp inside control plants volume",
         family="int_temp",
-        ip_addr="10.10.0.7"
+        ip_addr=relay_3_ip
     )
     control_int_hum = HardwareSensorOnRelayBoard(
         device_id=123,
         name="control_int_hum",
         description="DHT22 hum inside control plants volume",
         family="int_hum",
-        ip_addr="10.10.0.7"
+        ip_addr=relay_3_ip
     )
     control_roots_temp = HardwareSensorOnRelayBoard(
         device_id=124,
         name="control_roots_temp",
         description="DS18B20 temp inside control roots module",
         family="roots_temp",
-        ip_addr="10.10.0.7"
+        ip_addr=relay_3_ip
     )
 
 
