@@ -14,58 +14,88 @@ class HardwareCollection:
     That is a class container for hardware devices, that can work with redis and sqlite
     """
 
-    def __init__(self, app_context, hardware_dict: Dict[int, Hardware]=None):
+    def __init__(self, hardware_dict: Dict[int, Hardware]=None, task_list: List[str]=None):
         """
         NOTE:
         we cannot load descriptions from redis if devices were not loaded to dict before !
         but we can add or remove device in work process
         """
-        with app_context:
-            # dict to store hardware handlers
-            self.hardware: Dict[int, Hardware] = hardware_dict if hardware_dict else {}
-            # list to store task handler names
-            self.tasks: List[str] = list()   # dirty workaround, sorry
-            self.redis_client = get_db()
-            self.logger = Logger.get_logger(f"{self.__class__.__name__}")
-            # check if there is already working devices or we are first instance, ie if redis is empty
-            if self.redis_client.set("global_hardware_lock:", "locked", nx=True, ex=10):
-                # we set lock here for 10 seconds, because all flask instances must start in one time
-                # so after 10 second some stupid instance can update all operational data to default values
-                # that`s the life
-                # so
-                self.logger.info("we are the first flask instance, we need to store hardware params to redis")
+        # dict to store hardware handlers
+        self.hardware: Dict[int, Hardware] = hardware_dict if hardware_dict else {}
+        # list to store task handler names
+        self.tasks: List[str] =  task_list if task_list else list()   # dirty workaround, sorry
+        self.redis_client = get_db()
+        self.logger = Logger.get_logger(f"{self.__class__.__name__}")
+        # check if there is already working devices or we are first instance, ie if redis is empty
+        if self.redis_client.set("global_hardware_lock:", "locked", nx=True, ex=10) and hardware_dict:
+            # we set lock here for 10 seconds, because all flask instances must start in one time
+            # so after 10 second some stupid instance can update all operational data to default values
+            # that`s the life
+            # so
+            self.logger.info("we are the first flask instance, we need to store hardware params to redis")
 
-                self.store_hardware_description_to_redis()
-                # also lets create tables in sqlite db
-                data_db_path = current_app.instance_path + "/" + current_app.config['DATA_DB_NAME']
-                data_db =  sqlite3.connect(data_db_path, detect_types=sqlite3.PARSE_DECLTYPES)
-                cursor = data_db.cursor()
-                print(data_db)
+            self.store_hardware_description_to_redis()
+            # also lets create tables in sqlite db
+            data_db =  get_data_db()
+            cursor = data_db.cursor()
 
-                for device_id in self.hardware:
-                    for d in self.hardware[device_id].data:
-                        table_name = f"device_{device_id}_{d}"
-                        cursor.execute(f"""
-                                CREATE TABLE IF NOT EXISTS {table_name} (
-                                    num INTEGER PRIMARY KEY AUTOINCREMENT,
-                                    datetime TIMESTAMP,
-                                    value REAL
-                                )
-                            """)
-                        self.logger.info(f"added sqlite table for device_{device_id}_{d}")
-                data_db.commit()
-                data_db.close()
-            else:
-                self.logger.info("we are NOT the first flask instance,so just load data from db")
-                self.load_hardware_description_from_redis()
+            for device_id in self.hardware:
+                for d in self.hardware[device_id].data:
+                    table_name = f"device_{device_id}_{d}"
+                    cursor.execute(f"""
+                            CREATE TABLE IF NOT EXISTS {table_name} (
+                                num INTEGER PRIMARY KEY AUTOINCREMENT,
+                                datetime TIMESTAMP,
+                                value REAL
+                            )
+                        """)
+                    self.logger.info(f"added sqlite table for device_{device_id}_{d}")
+            # create information table with names for plotting
+            cursor.execute(f"""
+                            CREATE TABLE IF NOT EXISTS device_info (
+                                num INTEGER PRIMARY KEY AUTOINCREMENT,
+                                id INTEGER,
+                                name TEXT,
+                                description TEXT
+                            )
+                        """)
+            # fill it with device names
+            for device_id in self.hardware:
+                cursor.execute(f"""
+                    INSERT INTO device_info (id, name, description) VALUES (?, ?, ?);
+                """, (device_id, self.hardware[device_id].params["name"], self.hardware[device_id].params["description"]))
+            data_db.commit()
+            data_db.close()
+        else:
+            self.logger.info("we are NOT the first flask instance,so just load data from db")
+            self.load_hardware_description_from_redis()
+
+        # search unique ips
+        self.unique_ips : Dict[Any, List[int]]= {}
+        # it is a dict where keys is a unique ips, and each key stores list of devices, connected to that ip
+        self.not_online_devices: List[int] = []
+        # ant it is just list
+        for h_id in self.hardware:
+            if "ip_addr" in self.hardware[h_id].params :
+                # and (self.hardware[h_id].params["ip_addr"] not in self.unique_ips):
+                ipa = self.hardware[h_id].params["ip_addr"]
+                if ipa not in self.unique_ips:
+                    self.unique_ips[ipa] = []
+                self.unique_ips[ipa].append(h_id)
+
+            elif "ip_addr" not in self.hardware[h_id].params:
+                self.not_online_devices.append(
+                    h_id
+                )
+        print(self.unique_ips)
+        print(self.not_online_devices)
+        print(self.tasks)
 
     def save_measurement_to_sqlite(self, device_id):
         """
         Insert a measurement into the table corresponding to a device.
         """
-
-        data_db_path = current_app.instance_path + "/" + current_app.config['DATA_DB_NAME']
-        data_db = sqlite3.connect(data_db_path, detect_types=sqlite3.PARSE_DECLTYPES)
+        data_db = get_data_db()
         cursor = data_db.cursor()
         # for d in self.hardware[device_id].data:
         #     self.logger.debug(f"device_{device_id}   has  {d} data type")
@@ -134,9 +164,50 @@ class HardwareCollection:
             self.redis_client.set(f"{key_prefix}:commands", json.dumps(self.hardware[h_id].commands))
             self.redis_client.set(f"{key_prefix}:data", json.dumps(self.hardware[h_id].data))
 
+    @classmethod
+    # set decode_responses=True to use with that method
+    def from_redis(cls, redis_client: redis.Redis):
+        """ Load dict representation directly from redis db and create new HardwareCollection instance on it"""
+        r = redis_client
+        # at first - create list of unique IDs
+        device_keys = r.keys('device:*')
+        unique_ids = []
+        for k in device_keys:
+            id_ = k.split(":")[1]
+            if id_ not in unique_ids:
+                unique_ids.append(int(id_))
+        #print(unique_ids)
+        hardware_dict = {}
+        for uid in unique_ids:
+            uid_params = json.loads(r.get(f'device:{uid}:params'))
+            # lets create device and add it to hardware list
+            dev_type = uid_params['type']
+            if dev_type == "relay":
+                new_hardware = HardwareRelay.from_redis(r, uid)
+                hardware_dict[uid] = new_hardware
+            elif dev_type == "lamp":
+                new_hardware = HardwareLamp.from_redis(r, uid)
+                hardware_dict[uid] = new_hardware
+            elif dev_type == "sensor" and uid_params['family'] != "SBA5":
+                new_hardware = HardwareSensorOnRelayBoard.from_redis(r, uid)
+                hardware_dict[uid] = new_hardware
+            elif dev_type == "sensor" and uid_params['family'] == "SBA5":
+                new_hardware = HardwareSBA5.from_redis(r, uid)
+                hardware_dict[uid]=new_hardware
+        #print(hardware_dict)
+        # now lets find all tasks except update tasks
+        task_list = []
+        all_worker_keys = r.keys('worker:*')
+        for wk in all_worker_keys:
+            name = wk.split(":")[1]
+            if "update" not in name and name not in task_list:
+                task_list.append(name)
+        #print(task_list)
+        hc = cls(hardware_dict, task_list)
+        return hc
+
     def load_hardware_description_from_redis(self):
         """ Load dict representation directly from redis db"""
-        # TODO: we can generate devices from unique prefixes in redis
         for h_id in self.hardware:
             key_prefix = f"device:{h_id}"
 
@@ -153,10 +224,6 @@ class HardwareCollection:
                 self.hardware[h_id].data = json.loads(data_json)
 
         return self.to_list()
-
-    # def to_json(self) -> str:
-    #     """Convert the collection to a JSON string."""
-    #     return json.dumps([hw.to_dict() for hw in self.hardware.values()])
 
     def to_list(self) -> list:
         devices_list = [hw.to_dict() for hw in self.hardware.values()]
@@ -175,9 +242,21 @@ class HardwareCollection:
             device = self.hardware[device_id]
             device.run_command(command, arg=arg)
             self.store_one_device_update_to_redis(device_id)
-            # TODO: remove sqlite writing here, we will write to sqlite only when state update polling
-            # self.save_measurement_to_sqlite(device_id)
             return True
+
+    def optimal_device_update(self, ip_addr):
+        """That is a method to send update request for all devices on one ip only once, to reduce network load"""
+        # make one info call from any device, connected to that ip
+        device_id = self.unique_ips[ip_addr][0]  # this is just id
+        raw_data, status = self.hardware[device_id].get_raw_info()
+        if status:
+            for h_id in self.unique_ips[ip_addr]:
+                # push that data to all devices on same ip
+                self.hardware[h_id].parse_and_update_info(raw_data)
+                self.store_one_device_update_to_redis(h_id)
+                self.save_measurement_to_sqlite(h_id)
+
+
 
     def get_device_states(self):
         """
@@ -210,6 +289,12 @@ class HardwareCollection:
 if __name__ == "__main__":
     # Initialize Redis client
     pass
+    r = redis.Redis('localhost', 6379, decode_responses=True)
+    hc = HardwareCollection.from_redis(redis_client=r)
+    print(hc.hardware)
+    print(hc.unique_ips)
+    print(hc.not_online_devices)
+    print(hc.hardware[99].get_info())
     # def from_json(self, json_str: str):
     #     """Update the collection from a JSON string."""
     #     data = json.loads(json_str)
