@@ -1,0 +1,40 @@
+.container {
+    max-width: 960px; /* Adjust this value as needed */
+}
+.control-row {
+    background-color: #0d6efd; /* Bootstrap $blue */
+    color: #ffffff;
+    padding: 0.5rem;
+}
+.control-row .form-select,
+.control-row .form-control,
+.control-row .btn {
+    color: #000;
+}
+.btn-outline-light {
+    color: #0d6efd; /* Bootstrap $blue */
+    border-color: #0d6efd; /* Bootstrap $blue */
+    background-color: #ffffff; /* White background for 'Parameters' button */
+}
+
+.status-indicator {
+    padding: 0.25em 0.5em;
+    color: #fff;
+    border-radius: 0.25rem;
+    margin-left: 1rem;
+}
+.status-ok {
+    background-color: #198754; /* Bootstrap $green */
+}
+.status-error {
+    background-color: #dc3545; /* Bootstrap $red */
+}
+table {
+    border-color: #aed0fa; /* A lighter shade of Bootstrap $blue, similar to $blue-200 */
+    background-color: #aed0fa;
+}
+table th,
+table td {
+    border-color: #aed0fa; /* Ensuring the table cells also have the lighter border */
+    background-color: #aed0fa;
+}
