@@ -187,6 +187,7 @@ class HardwareRelay(Hardware):
             self.parse_and_update_info(info_dict)
             return True
         else:
+            self.params["status"] = "error"
             return False
 
     def get_raw_info(self):
@@ -194,6 +195,7 @@ class HardwareRelay(Hardware):
         if info_dict:
             return info_dict, True
         else:
+            self.params["status"] = "error"
             return {}, False
 
     def _set_relay_state(self, state: int):
@@ -428,6 +430,7 @@ class HardwareLamp(Hardware):
         if info_dict:
             return info_dict, True
         else:
+            self.params["status"] = "error"
             return {}, False
 
 

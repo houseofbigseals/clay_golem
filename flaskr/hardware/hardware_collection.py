@@ -255,6 +255,12 @@ class HardwareCollection:
                 self.hardware[h_id].parse_and_update_info(raw_data)
                 self.store_one_device_update_to_redis(h_id)
                 self.save_measurement_to_sqlite(h_id)
+        else:
+            # for example if we never got any answer from that device
+            # then local instance of flask store error about it
+            for h_id in self.unique_ips[ip_addr]:
+                self.store_one_device_update_to_redis(h_id)
+
 
 
 
