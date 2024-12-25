@@ -35,7 +35,7 @@ def init_hardware(mode="test"):
         lamp_0_ip = "10.10.0.15"
         lamp_1_ip = "10.10.0.16"
 
-    elif mode == "local":
+    elif mode == "mdns":
         # will use mdns names in hope that it make requests more fast
         lamp_2_ip = "10.10.0.14"  # still remote
         relay_5_ip = "10.10.0.18"  # still remote
@@ -45,6 +45,17 @@ def init_hardware(mode="test"):
         relay_4_ip = "esp32_relay_4.local"
         lamp_0_ip = "esp32_pwm_lamp_0.local"
         lamp_1_ip = "esp32_pwm_lamp_1.local"
+
+    elif mode == "local":
+        # will use local ips in hope that it make requests more fast
+        lamp_2_ip = "10.10.0.14"  # still remote
+        relay_5_ip = "10.10.0.18"  # still remote
+        relay_1_ip = "192.168.0.91"
+        relay_2_ip = "192.168.0.92"
+        relay_3_ip = "192.168.0.93"
+        relay_4_ip = "192.168.0.94"
+        lamp_0_ip = "192.168.0.95"
+        lamp_1_ip = "192.168.0.96"
     else:
         lamp_2_ip = "10.10.0.14"
         relay_5_ip = "10.10.0.18"
