@@ -109,7 +109,7 @@ class HardwareCollection:
                 INSERT INTO {table_name} (datetime, value)
                 VALUES (?, ?)
             """, (current_datetime, measured_value))
-            self.logger.debug(f"loaded {measured_value} to table device_{device_id}_{d}")
+            # self.logger.debug(f"loaded {measured_value} to table device_{device_id}_{d}")
             data_db.commit()
 
         data_db.close()

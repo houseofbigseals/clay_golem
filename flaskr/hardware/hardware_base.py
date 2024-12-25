@@ -117,6 +117,8 @@ class HardwareRelay(Hardware):
             host=self.params["ip_addr"],
             name=self.params["name"]
         )
+        self.max_commands_repeat = 3
+        self.command_repeat_counter = 0
 
     @classmethod
     def from_redis(cls, redis_client: redis.Redis, device_id: int):
@@ -199,17 +201,23 @@ class HardwareRelay(Hardware):
         private method to set relay state
         """
         try:
+            success = False
+            repeat_counter = 0
             # Устанавливаем состояние реле через драйвер
-            success, message = self.driver.set_relay_state(self.params["channel"], state)
-            
-            if success:
-                self.data["state"] = state  # Обновляем состояние в данных
-                self.params["status"] = "ok"  # Устанавливаем статус как "ok"
-                self.logger.info(f"{self.params['name']} (ID: {self.params['device_id']}) is now {'ON' if state else 'OFF'}.")
-            else:
-                self.logger.warning(f"Failed to set relay state: {message}")
-                self.params["status"] = "Error"  # Устанавливаем статус как "Error"
-                self.params["last_error"] = message  # Сохраняем сообщение об ошибке
+            while not success:
+                success, message = self.driver.set_relay_state(self.params["channel"], state)
+                if success:
+                    self.data["state"] = state  # Обновляем состояние в данных
+                    self.params["status"] = "ok"  # Устанавливаем статус как "ok"
+                    self.logger.info(f"{self.params['name']} (ID: {self.params['device_id']}) is now {'ON' if state else 'OFF'}.")
+                else:
+                    if repeat_counter >= self.max_commands_repeat:
+                        self.logger.warning(f"Failed to set relay state: {message}")
+                        self.params["status"] = "Error"  # Устанавливаем статус как "Error"
+                        self.params["last_error"] = message  # Сохраняем сообщение об ошибке
+                    else:
+                        repeat_counter +=1
+
         except Exception as e:
             #TODO а так вообще бывает?
             self.logger.error(e, exc_info=True)
@@ -285,6 +293,7 @@ class HardwareLamp(Hardware):
             host = self.params["ip_addr"],
             name = self.params["name"]
         )
+        self.max_command_repeat = 3
 
     @classmethod
     def from_redis(cls, redis_client: redis.Redis, device_id: int):
@@ -353,12 +362,20 @@ class HardwareLamp(Hardware):
         # Устанавливаем PWM через драйвер
         channel_mapping = {'red': [2, 3], 'white': [0, 1]}
         for channel in channel_mapping[color]:
-            success, message = self.driver.set_pwm(channel, pwm)
-            if not success:
-                self.params["status"] = "Error"  # Устанавливаем статус как "Error"
-                self.params["last_error"] = message  # Сохраняем сообщение об ошибке
-                self.logger.warning(f"Failed to set {color} PWM on channel {channel}: {message}")
-                return  # Прерываем выполнение, если установка не удалась
+            # for each channel
+            success = False
+            repeat_counter = 0
+            while not success:
+                success, message = self.driver.set_pwm(channel, pwm)
+                if success:
+                    self.logger.debug(f"Successfully set PWM on channel {channel}: {message}")
+                else:
+                    if repeat_counter >= self.max_command_repeat:
+                        self.params["status"] = "Error"  # Устанавливаем статус как "Error"
+                        self.params["last_error"] = message  # Сохраняем сообщение об ошибке
+                        self.logger.error(f"Failed to set {color} PWM on channel {channel}: {message}")
+                    else:
+                        repeat_counter +=1
 
     def set_red(self, pwm: int):
         self.set_pwm('red', pwm)

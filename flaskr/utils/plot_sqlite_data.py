@@ -100,8 +100,10 @@ if __name__ == "__main__":
     # tables = ['device_100_red_pwm_2', 'device_100_white_pwm_2', 'device_101_state', 'device_102_state',
     #           'device_103_state', 'device_104_state']
     # exp_tables = ['device_110_state', 'device_111_state', 'device_112_state', 'device_113_state', 'device_106_hum', 'device_107_temp', 'device_108_hum', 'device_109_temp']
-    exp_tables = ['device_99_co2','device_110_state', 'device_111_state', 'device_112_state', 'device_113_state', 'device_106_hum',
-                  'device_107_temp', 'device_108_hum', 'device_109_temp']
+    exp_tables = ['device_99_co2','device_110_state',# 'device_111_state', #'device_112_state', 'device_113_state',
+                  #'device_106_hum','device_107_temp',
+                  'device_108_hum',# 'device_109_temp'
+                  ]
 
     control_tables =  ['device_118_state', 'device_119_state', 'device_120_state', 'device_121_state', 'device_122_temp',
                        'device_123_hum', 'device_124_temp']
