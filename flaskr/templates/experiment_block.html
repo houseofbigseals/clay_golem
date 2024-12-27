@@ -4,6 +4,8 @@
     <div class="alert alert-info" role="alert">
         <strong>Статус:</strong> <span id="experiment-status{{ device_name }}">{{ device.params.status }}</span> |
         <strong>Последнее обновление:</strong> <span id="last-update{{ device_name }}">{{ device.params.last_response }}</span>
+        <strong>Шаг:</strong> <span id="step-num{{ device_name }}">{{ device.params.step }}</span>
+        <strong>Имя текущего шага: </strong><span id="stage-name{{ device_name }}">{{ device.params.current_stage_name }}</span>
     </div>
     
     <div class="mb-3">
