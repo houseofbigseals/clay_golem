@@ -45,7 +45,8 @@ def get_data_db():
     this method returns sqlite db pointer
     :return:
     """
-    data_db_path = current_app.instance_path + "/" + current_app.config['DATA_DB_NAME']
+    instance_path = "/opt/clay/clay_golem/instance"
+    data_db_path = instance_path + "/" + "data.sqlite"
     data_db = sqlite3.connect(
         data_db_path,
         detect_types=sqlite3.PARSE_DECLTYPES

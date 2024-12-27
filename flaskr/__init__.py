@@ -5,7 +5,7 @@ import threading
 from flask import Flask, render_template, jsonify, request, current_app
 from . import db
 from .db import get_db
-from .tasks.update_data_task import state_update_worker
+from .tasks.update_data_task import state_update_worker, one_ip_update_worker, one_device_update_worker
 from .tasks.ventilation_task import TaskThread, VentilationTaskThread, ExpVentilationTaskThread, ControlVentilationTaskThread
 from .hardware.hardware_config import init_hardware
 from .utils.logger import Logger
@@ -30,7 +30,7 @@ def create_app():
     # main page with all controls
     @app.route('/')
     def index():
-        with app_context:
+        with app.app_context():
             devices = current_app.global_hardware_collection.get_device_states()
             return render_template('index.html', devices=devices)
 
@@ -49,7 +49,7 @@ def create_app():
             # Например, можно вызвать соответствующую функцию из модуля hardware
             
             # Handle the command
-            with app_context:
+            with app.app_context():
                 success = current_app.global_hardware_collection.handle_task_command(task_id, command, arg)
 
                 # Получаем данные о задаче вентиляции
@@ -83,7 +83,7 @@ def create_app():
                 arg = int(arg)
 
             # Handle the command
-            with app_context:
+            with app.app_context():
                 success = current_app.global_hardware_collection.handle_command(device_id, command, arg)
 
             # Return a success response
@@ -100,7 +100,7 @@ def create_app():
     @app.route('/get-device-updates')
     def get_device_updates():
         # `device_states` is a big list with dictionaries holding the state of each device
-        with app_context:
+        with app.app_context():
             new_states = current_app.global_hardware_collection.get_device_states()
             return jsonify(new_states)
 
@@ -112,20 +112,23 @@ def create_app():
 
 
     global_boot_mode = "test"
-    app_context = app.app_context()
-    with app_context:
-        current_app.global_hardware_collection = init_hardware(app_context, mode=global_boot_mode)
+    unique_ips = {}
+    not_online_devices = []
+    global_hardware_collection = init_hardware(mode=global_boot_mode)
+    unique_ips = global_hardware_collection.unique_ips
+    not_online_devices = global_hardware_collection.not_online_devices
 
     # init tasks
-    app_context = app.app_context()
-    # start data updating thread
-    # TODO: make one thread for each device? It will make updating much faster
-    update_thread = threading.Thread(target=state_update_worker, args=(app_context,), daemon=True)
-    # update_thread.start()
-    with app_context:
-        current_app.update_thread = update_thread
+    # start data updating threads
+    for ip_addr in unique_ips:
+        update_thread = threading.Thread(target=one_ip_update_worker, args=(ip_addr,), daemon=True)
+        update_thread.start()
 
-        # start ventilation task threads
+    for dev_id in not_online_devices:
+        update_thread = threading.Thread(target=one_device_update_worker, args=(dev_id,), daemon=True)
+        update_thread.start()
+
+    # start ventilation task threads
     test_task = VentilationTaskThread(name="worker:test")
     if global_boot_mode == "production":
         exp_vent_task = ExpVentilationTaskThread(name="worker:exp_ventilation")
@@ -133,15 +136,16 @@ def create_app():
 
     # add task names to hardware collection
     # and start them all
-    with app_context:
-        # current_app.global_hardware_collection.tasks.append(current_app.vent_task.params["name"])
-        current_app.global_hardware_collection.tasks.append("worker:test")
-        if global_boot_mode == "production":
-            current_app.global_hardware_collection.tasks.append("worker:exp_ventilation")
-            current_app.global_hardware_collection.tasks.append("worker:control_ventilation")
+    # current_app.global_hardware_collection.tasks.append(current_app.vent_task.params["name"])
+    global_hardware_collection.tasks.append("worker:test")
+    if global_boot_mode == "production":
+        global_hardware_collection.tasks.append("worker:exp_ventilation")
+        global_hardware_collection.tasks.append("worker:control_ventilation")
+
+    with app.app_context():
+        current_app.global_hardware_collection = global_hardware_collection
         print(current_app.global_hardware_collection.tasks)
 
-    update_thread.start()
     test_task.start()
     if global_boot_mode == "production":
         exp_vent_task.start()

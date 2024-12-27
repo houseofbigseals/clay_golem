@@ -1,6 +1,7 @@
 import sys
+from enum import unique
+
 sys.path.insert(0, "/opt/clay/clay_golem")
-print(sys.path)
 from flaskr.hardware.hardware_base import HardwareLamp, HardwareRelay, HardwareSensorOnRelayBoard, HardwareSBA5
 from flaskr.hardware.hardware_collection import HardwareCollection
 from flask import current_app, g
@@ -8,7 +9,7 @@ from typing import Any
 
 
 
-def init_hardware(app_context, mode="test"):
+def init_hardware(mode="test"):
     """
     """
 
@@ -34,7 +35,7 @@ def init_hardware(app_context, mode="test"):
         lamp_0_ip = "10.10.0.15"
         lamp_1_ip = "10.10.0.16"
 
-    elif mode == "local":
+    elif mode == "mdns":
         # will use mdns names in hope that it make requests more fast
         lamp_2_ip = "10.10.0.14"  # still remote
         relay_5_ip = "10.10.0.18"  # still remote
@@ -44,6 +45,17 @@ def init_hardware(app_context, mode="test"):
         relay_4_ip = "esp32_relay_4.local"
         lamp_0_ip = "esp32_pwm_lamp_0.local"
         lamp_1_ip = "esp32_pwm_lamp_1.local"
+
+    elif mode == "local":
+        # will use local ips in hope that it make requests more fast
+        lamp_2_ip = "10.10.0.14"  # still remote
+        relay_5_ip = "10.10.0.18"  # still remote
+        relay_1_ip = "192.168.0.91"
+        relay_2_ip = "192.168.0.92"
+        relay_3_ip = "192.168.0.93"
+        relay_4_ip = "192.168.0.94"
+        lamp_0_ip = "192.168.0.95"
+        lamp_1_ip = "192.168.0.96"
     else:
         lamp_2_ip = "10.10.0.14"
         relay_5_ip = "10.10.0.18"
@@ -219,50 +231,57 @@ def init_hardware(app_context, mode="test"):
         ip_addr=relay_3_ip
     )
 
+    # unique_ips = [
+    #     lamp_2_ip,
+    #     relay_5_ip,
+    #     relay_1_ip,
+    #     relay_2_ip,
+    #     relay_3_ip,
+    #     lamp_0_ip,
+    #     lamp_1_ip
+    #     ]
 
-    with app_context:
-        global_hardware_collection = HardwareCollection(
-            app_context,
-            hardware_dict={
-                99: sba5_device,
-                100: lamp0,
-                101: relay0,
-                102: relay1,
-                103: relay2,
-                104: relay3,
-                105: exp_ext_temp,
-                106: exp_ext_hum,
-                107: exp_int_temp,
-                108: exp_int_hum,
-                109: exp_roots_temp,
-                110: exp_left_vent,
-                111: exp_right_vent,
-                112: exp_left_valve,
-                113: exp_right_valve,
-                114: co2_air_pump,
-                115: co2_valve,
-                116: exp_lamp,
-                117: control_lamp,
-                118: control_left_vent,
-                119: control_right_vent,
-                120: control_left_valve,
-                121: control_right_valve,
-                122: control_int_temp,
-                123: control_int_hum,
-                124: control_roots_temp
-            }
-        )
+    global_hardware_collection = HardwareCollection(
+        hardware_dict={
+            99: sba5_device,
+            100: lamp0,
+            101: relay0,
+            102: relay1,
+            103: relay2,
+            104: relay3,
+            105: exp_ext_temp,
+            106: exp_ext_hum,
+            107: exp_int_temp,
+            108: exp_int_hum,
+            109: exp_roots_temp,
+            110: exp_left_vent,
+            111: exp_right_vent,
+            112: exp_left_valve,
+            113: exp_right_valve,
+            114: co2_air_pump,
+            115: co2_valve,
+            116: exp_lamp,
+            117: control_lamp,
+            118: control_left_vent,
+            119: control_right_vent,
+            120: control_left_valve,
+            121: control_right_valve,
+            122: control_int_temp,
+            123: control_int_hum,
+            124: control_roots_temp
+        }
+    )
 
-        # g.global_hardware_collection.add(lamp0)
-        # g.global_hardware_collection.add(relay0)
-        # g.global_hardware_collection.add(relay1)
-        # g.global_hardware_collection.add(relay2)
-        # g.global_hardware_collection.add(relay3)
+    # g.global_hardware_collection.add(lamp0)
+    # g.global_hardware_collection.add(relay0)
+    # g.global_hardware_collection.add(relay1)
+    # g.global_hardware_collection.add(relay2)
+    # g.global_hardware_collection.add(relay3)
 
-        # first time store that user-defined hardware collection to redis
-        global_hardware_collection.store_hardware_description_to_redis()
-        # print("hardware init finished")
-        return global_hardware_collection
+    # first time store that user-defined hardware collection to redis
+    global_hardware_collection.store_hardware_description_to_redis()
+    # print("hardware init finished")
+    return global_hardware_collection
 
 
 

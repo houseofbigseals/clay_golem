@@ -1,7 +1,11 @@
 import json
+import redis
 from abc import ABC, abstractmethod
-from typing import List, Dict, Type, TypeVar, Union
+from typing import List, Dict, Type, TypeVar, Union, Any, Tuple
 from datetime import datetime
+
+from click import Tuple
+
 from flaskr.drivers import pwm_lamp_driver, esp32_relay_driver, sba5_driver
 from flaskr.utils.leds_calibration import measure
 from flaskr.utils.logger import Logger
@@ -34,7 +38,7 @@ class Hardware(ABC):
         }
 
     @abstractmethod
-    def run_command(self, command, arg):    # ONLY ONE ARG for simplicity?
+    def run_command(self, command: str, arg: Any):    # ONLY ONE ARG for simplicity?
         """
         I do not want to make some remote call, it is very unsafe
         So lets every child class implements it itself manually
@@ -42,9 +46,24 @@ class Hardware(ABC):
         pass
 
     @abstractmethod
-    def get_info(self):
+    def get_info(self) -> bool:
         """
         get info about state of that particular device
+        """
+        pass
+
+
+    @abstractmethod
+    def get_raw_info(self) -> [Dict, bool]:  #[Dict, bool]:
+        """
+        get info about state of all devices, connected to that ip, but not parsed
+        """
+        pass
+
+    @abstractmethod
+    def parse_and_update_info(self, info_dict: Dict):
+        """
+        parse info message, that was obtained somewhere else
         """
         pass
 
@@ -98,6 +117,48 @@ class HardwareRelay(Hardware):
             host=self.params["ip_addr"],
             name=self.params["name"]
         )
+        self.max_commands_repeat = 3
+        self.command_repeat_counter = 0
+
+    @classmethod
+    def from_redis(cls, redis_client: redis.Redis, device_id: int):
+        """
+        Class method to create a HardwareRelay object from Redis data.
+        Assumes that the Redis client has all necessary keys stored for the device.
+        """
+        # Fetch the params data as a JSON string from Redis
+        data = redis_client.get(f"device:{device_id}:params")
+
+        if data is None:
+            raise ValueError(f"Device {device_id} not found in Redis.")
+
+        # Parse the JSON string into a dictionary
+        params = json.loads(data)
+
+        # Fetch the commands and data similarly (assuming these are also stored as JSON strings)
+        data_data = redis_client.get(f"device:{device_id}:data")
+
+        if data_data:
+            data = json.loads(data_data)
+        else:
+            data = {}
+
+        # Initialize the device from the parsed values
+        device = cls(
+            device_id=device_id,
+            name=params.get("name", ""),
+            ip_addr=params.get("ip_addr"),
+            channel=int(params.get("channel")),
+            last_time_active=params.get("last_time_active"),
+            type=params.get("type", "relay"),
+            uptime_sec=int(params.get("uptime_sec", 0)),
+            description=params.get("description", ""),
+            status=params.get("status", "unknown"),
+            last_error=params.get("last_error", ""),
+        )
+        # Restore the data and commands values
+        device.data = data
+        return device
 
     def run_command(self, command, **args):
         """
@@ -110,37 +171,55 @@ class HardwareRelay(Hardware):
         if command == "reset":
             self.reset()
 
+    def parse_and_update_info(self, info_dict: Dict):
+        ch_id = "ch" + str(self.params["channel"])  # to get str like ch0 or ch2
+        self.data["state"] = info_dict[ch_id]
+        self.params["uptime"] = info_dict["uptime"]
+        self.params["last_time_active"] = datetime.now().strftime("%m/%d/%Y %H:%M:%S")
+        self.params["status"] = "ok"
+
     def get_info(self):
         """
 
         """
         info_dict = self.driver.get_info()
         if info_dict:
-            ch_id = "ch" + str(self.params["channel"])  # to get str like ch0 or ch2
-            self.data["state"] = info_dict[ch_id]
-            self.params["uptime"] = info_dict["uptime"]
-            self.params["last_time_active"] = datetime.now().strftime("%m/%d/%Y %H:%M:%S")
-            self.params["status"] = "ok"
+            self.parse_and_update_info(info_dict)
             return True
         else:
+            self.params["status"] = "error"
             return False
+
+    def get_raw_info(self):
+        info_dict = self.driver.get_info()
+        if info_dict:
+            return info_dict, True
+        else:
+            self.params["status"] = "error"
+            return {}, False
 
     def _set_relay_state(self, state: int):
         """
         private method to set relay state
         """
         try:
+            success = False
+            repeat_counter = 0
             # Устанавливаем состояние реле через драйвер
-            success, message = self.driver.set_relay_state(self.params["channel"], state)
-            
-            if success:
-                self.data["state"] = state  # Обновляем состояние в данных
-                self.params["status"] = "ok"  # Устанавливаем статус как "ok"
-                self.logger.info(f"{self.params['name']} (ID: {self.params['device_id']}) is now {'ON' if state else 'OFF'}.")
-            else:
-                self.logger.warning(f"Failed to set relay state: {message}")
-                self.params["status"] = "Error"  # Устанавливаем статус как "Error"
-                self.params["last_error"] = message  # Сохраняем сообщение об ошибке
+            while not success:
+                success, message = self.driver.set_relay_state(self.params["channel"], state)
+                if success:
+                    self.data["state"] = state  # Обновляем состояние в данных
+                    self.params["status"] = "ok"  # Устанавливаем статус как "ok"
+                    self.logger.info(f"{self.params['name']} (ID: {self.params['device_id']}) is now {'ON' if state else 'OFF'}.")
+                else:
+                    if repeat_counter >= self.max_commands_repeat:
+                        self.logger.warning(f"Failed to set relay state: {message}")
+                        self.params["status"] = "Error"  # Устанавливаем статус как "Error"
+                        self.params["last_error"] = message  # Сохраняем сообщение об ошибке
+                    else:
+                        repeat_counter +=1
+
         except Exception as e:
             #TODO а так вообще бывает?
             self.logger.error(e, exc_info=True)
@@ -216,6 +295,44 @@ class HardwareLamp(Hardware):
             host = self.params["ip_addr"],
             name = self.params["name"]
         )
+        self.max_command_repeat = 3
+
+    @classmethod
+    def from_redis(cls, redis_client: redis.Redis, device_id: int):
+        """
+        Class method to create a HardwareLamp object from Redis data.
+        Assumes that the Redis client has all necessary keys stored for the device.
+        """
+        # Fetch the params data as a JSON string from Redis
+        data = redis_client.get(f"device:{device_id}:params")
+
+        if data is None:
+            raise ValueError(f"Device {device_id} not found in Redis.")
+
+        # Parse the JSON string into a dictionary
+        params = json.loads(data)
+        data_data = redis_client.get(f"device:{device_id}:data")
+
+        if data_data:
+            data = json.loads(data_data)
+        else:
+            data = {}
+        # Initialize the device from the parsed values
+        device = cls(
+            device_id=device_id,
+            name=params.get("name", ""),
+            ip_addr=params.get("ip_addr", ""),
+            last_time_active=params.get("last_time_active"),
+            type=params.get("type", "lamp"),
+            uptime_sec=int(params.get("uptime_sec", 0)),
+            description=params.get("description", ""),
+            status=params.get("status", "unknown"),
+            last_error=params.get("last_error", ""),
+        )
+
+        # Restore the data and commands values
+        device.data = data
+        return device
 
     def run_command(self, command, arg):
         """
@@ -247,12 +364,20 @@ class HardwareLamp(Hardware):
         # Устанавливаем PWM через драйвер
         channel_mapping = {'red': [2, 3], 'white': [0, 1]}
         for channel in channel_mapping[color]:
-            success, message = self.driver.set_pwm(channel, pwm)
-            if not success:
-                self.params["status"] = "Error"  # Устанавливаем статус как "Error"
-                self.params["last_error"] = message  # Сохраняем сообщение об ошибке
-                self.logger.warning(f"Failed to set {color} PWM on channel {channel}: {message}")
-                return  # Прерываем выполнение, если установка не удалась
+            # for each channel
+            success = False
+            repeat_counter = 0
+            while not success:
+                success, message = self.driver.set_pwm(channel, pwm)
+                if success:
+                    self.logger.debug(f"Successfully set PWM on channel {channel}: {message}")
+                else:
+                    if repeat_counter >= self.max_command_repeat:
+                        self.params["status"] = "Error"  # Устанавливаем статус как "Error"
+                        self.params["last_error"] = message  # Сохраняем сообщение об ошибке
+                        self.logger.error(f"Failed to set {color} PWM on channel {channel}: {message}")
+                    else:
+                        repeat_counter +=1
 
     def set_red(self, pwm: int):
         self.set_pwm('red', pwm)
@@ -278,24 +403,35 @@ class HardwareLamp(Hardware):
                 self.params["status"] = "Error"  # Устанавливаем статус как "Error"
 
 
+    def parse_and_update_info(self, info_dict: Dict):
+        self.data["white_pwm_1"] = info_dict["ch0_pwm"]
+        self.data["white_pwm_2"] = info_dict["ch1_pwm"]
+        self.data["red_pwm_1"] = info_dict["ch2_pwm"]
+        self.data["red_pwm_2"] = info_dict["ch3_pwm"]
+        self.data["driver_temp"] = round(info_dict["pcb_temp"], 2)
+        self.params["uptime"] = info_dict["uptime"]
+        self.params["last_time_active"] = datetime.now().strftime("%m/%d/%Y %H:%M:%S")
+        self.params["status"] = "ok"
+
     def get_info(self):
         """
 
         """
         info_dict = self.driver.get_info()
         if info_dict:
-            self.data["white_pwm_1"] = info_dict["ch0_pwm"]
-            self.data["white_pwm_2"] = info_dict["ch1_pwm"]
-            self.data["red_pwm_1"] = info_dict["ch2_pwm"]
-            self.data["red_pwm_2"] = info_dict["ch3_pwm"]
-            self.data["driver_temp"] = round(info_dict["pcb_temp"], 2)
-            self.params["uptime"] = info_dict["uptime"]
-            self.params["last_time_active"] = datetime.now().strftime("%m/%d/%Y %H:%M:%S")
-            self.params["status"] = "ok"
+            self.parse_and_update_info(info_dict)
             return True
         else:
             self.params["status"] = "error"
             return False
+
+    def get_raw_info(self):
+        info_dict = self.driver.get_info()
+        if info_dict:
+            return info_dict, True
+        else:
+            self.params["status"] = "error"
+            return {}, False
 
 
 
@@ -358,6 +494,54 @@ class HardwareSensorOnRelayBoard(Hardware):
         # for d in self.data:
         #     self.logger.info(f"device {name} in family {family} has {d}")
 
+    @classmethod
+    def from_redis(cls, redis_client: redis.Redis, device_id: int):
+        """
+        Class method to create a HardwareSensorOnRelayBoard object from Redis data.
+        Assumes that the Redis client has all necessary keys stored for the device.
+        """
+        # Fetch the params data as a JSON string from Redis
+        data = redis_client.get(f"device:{device_id}:params")
+
+        if data is None:
+            raise ValueError(f"Device {device_id} not found in Redis.")
+
+        # Parse the JSON string into a dictionary
+        params = json.loads(data)
+
+        # Fetch the commands and data similarly (assuming these are also stored as JSON strings)
+        commands_data = redis_client.get(f"device:{device_id}:commands")
+        data_data = redis_client.get(f"device:{device_id}:data")
+
+        if commands_data:
+            commands = json.loads(commands_data)
+        else:
+            commands = {}
+
+        if data_data:
+            data = json.loads(data_data)
+        else:
+            data = {}
+
+        # Initialize the device from the parsed values
+        family = params.get("family", "unknown")
+        device = cls(
+            device_id=device_id,
+            name=params.get("name", ""),
+            ip_addr=params.get("ip_addr", ""),
+            family=family,
+            last_time_active=params.get("last_time_active"),
+            type=params.get("type", "sensor"),
+            uptime_sec=int(params.get("uptime_sec", 0)),
+            description=params.get("description", ""),
+            status=params.get("status", "unknown"),
+            last_error=params.get("last_error", ""),
+        )
+
+        # Restore the data and commands values
+        device.commands = commands
+        device.data = data
+        return device
 
     def run_command(self, command, arg):
         """
@@ -367,36 +551,46 @@ class HardwareSensorOnRelayBoard(Hardware):
         # sensors have no commands
         return True
 
+    def parse_and_update_info(self, info_dict: Dict):
+        code_name = self.params["family"]
+        self.params["uptime"] = info_dict["uptime"]
+        if (code_name == "roots_temp") or (code_name == "ext_temp") or (code_name == "int_temp"):
+            temp = info_dict[code_name]
+            if temp == self.driver.SENSOR_ERROR_VALUE:
+                self.params["status"] = "Error"
+                return False
+            else:
+                self.data["temp"] = round(info_dict[code_name], 2)
+
+        elif code_name == "ext_hum" or code_name == "int_hum":
+            hum = info_dict[code_name]
+            if hum == self.driver.SENSOR_ERROR_VALUE:
+                self.params["status"] = "Error"
+                return False
+            else:
+                self.data["hum"] = round(info_dict[code_name], 2)
+        self.params["last_time_active"] = datetime.now().strftime("%m/%d/%Y %H:%M:%S")
+        self.params["status"] = "ok"
+
     def get_info(self):
         """
         get info about state of that particular device
         """
-
-        code_name = self.params["family"]
         info_dict = self.driver.get_info()
         # self.logger.debug(self.params["device_id"])
         if info_dict:
-            self.params["uptime"] = info_dict["uptime"]
-            if (code_name  == "roots_temp") or (code_name  == "ext_temp") or (code_name  == "int_temp"):
-                temp = info_dict[code_name]
-                if temp == self.driver.SENSOR_ERROR_VALUE:
-                    self.params["status"] = "Error"
-                    return False
-                else:
-                    self.data["temp"] = round(info_dict[code_name], 2)
-
-            elif code_name == "ext_hum" or code_name =="int_hum":
-                hum = info_dict[code_name]
-                if hum == self.driver.SENSOR_ERROR_VALUE:
-                    self.params["status"] = "Error"
-                    return False
-                else:
-                    self.data["hum"] = round(info_dict[code_name], 2)
-            self.params["last_time_active"] = datetime.now().strftime("%m/%d/%Y %H:%M:%S")
-            self.params["status"] = "ok"
+            self.parse_and_update_info(info_dict)
             return True
         else:
             return False
+
+    def get_raw_info(self):
+        info_dict = self.driver.get_info()
+        if info_dict:
+            return info_dict, True
+        else:
+            return {}, False
+
 
 class HardwareSBA5(Hardware):
     """
@@ -438,7 +632,47 @@ class HardwareSBA5(Hardware):
         except Exception as e:
             self.driver = None
             self.params["status"] = "Not connected"
-            self.logger.error(str(e), exc_info=True)
+            self.logger.warning(str(e), exc_info=True)  # reduce that error to warning
+
+    @classmethod
+    def from_redis(cls, redis_client: redis.Redis, device_id: int):
+        """
+        Class method to create a HardwareSBA5 object from Redis data.
+        Assumes that the Redis client has all necessary keys stored for the device.
+        """
+        # Fetch the params data as a JSON string from Redis
+        data = redis_client.get(f"device:{device_id}:params")
+
+        if data is None:
+            raise ValueError(f"Device {device_id} not found in Redis.")
+
+        # Parse the JSON string into a dictionary
+        params = json.loads(data)
+
+        # Fetch the commands and data similarly (assuming these are also stored as JSON strings)
+        commands_data = redis_client.get(f"device:{device_id}:commands")
+        data_data = redis_client.get(f"device:{device_id}:data")
+
+        if data_data:
+            data = json.loads(data_data)
+        else:
+            data = {}
+
+        # Initialize the device from the parsed values
+        device = cls(
+            device_id=device_id,
+            name=params.get("name", ""),
+            family=params.get("family", "SBA5"),
+            last_time_active=params.get("last_time_active"),
+            type=params.get("type", "sensor"),
+            description=params.get("description", ""),
+            status=params.get("status", "unknown"),
+            last_error=params.get("last_error", ""),
+        )
+
+        # Restore the data and commands values
+        device.data = data
+        return device
 
     def run_command(self, command, arg):
         """
@@ -472,6 +706,13 @@ class HardwareSBA5(Hardware):
         else:
             return False
 
+    def get_raw_info(self):
+        """ it is offline device, so no additional raw info is available"""
+        pass
+
+    def parse_and_update_info(self, info_dict: Dict):
+        """Do not use that method, just call get_info instead"""
+        pass
 
 
 if __name__ == "__main__":
