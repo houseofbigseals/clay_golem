@@ -117,6 +117,8 @@ function updateExperimentStatus(task){
         console.error('Element with id "experiment-status" not found.');
     }
     document.getElementById('last-update'+task_postfix).innerText = task.params.last_response;
+    document.getElementById('step-num'+task_postfix).innerText = task.params.step;
+    document.getElementById('stage-name'+task_postfix).innerText = task.params.current_stage_name;
 }
 
 function sendExperimentCommand(task_name) {
