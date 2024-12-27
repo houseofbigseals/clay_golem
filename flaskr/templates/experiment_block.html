@@ -8,21 +8,19 @@
         <strong>Имя текущего шага: </strong><span id="stage-name{{ device_name }}">{{ device.params.current_stage_name }}</span>
     </div>
     
-    <div class="mb-3">
-        <label for="command-select" class="form-label">Команды</label>
-        <select id="command-select{{ device_name }}" class="form-select">
+    <div class="mb-3 d-flex align-items-center">
+        <label for="command-select" class="form-label me-2">Команды</label>
+        <select id="command-select{{ device_name }}" class="form-select me-2">
             {% for command in device.commands.keys() %}
                 <option value="{{ command }}">{{ command }}</option>
             {% endfor %}
         </select>
+        
+        <label for="command-args" class="form-label me-2">Аргументы</label>
+        <input type="text" id="command-args{{ device_name }}" class="form-control me-2" placeholder="Введите аргументы">
+        
+        <button type="button" class="btn btn-primary" onclick="sendExperimentCommand('{{ device.params.name }}')">Отправить команду</button>
     </div>
-    
-    <div class="mb-3">
-        <label for="command-args" class="form-label">Аргументы</label>
-        <input type="text" id="command-args{{ device_name }}" class="form-control" placeholder="Введите аргументы">
-    </div>
-    
-    <button type="button" class="btn btn-primary" onclick="sendExperimentCommand('{{ device.params.name }}')">Отправить команду</button>
     
     <div class="progress mt-3">
         {% set total_stages = device.stages | length %}
