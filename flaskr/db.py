@@ -46,7 +46,8 @@ def get_data_db():
     :return:
     """
     instance_path = "/opt/clay/clay_golem/instance"
-    data_db_path = instance_path + "/" + "data.sqlite"
+    curr_date = datetime.now().strftime("%d_%m_%Y")
+    data_db_path = instance_path + "/" + f"data_{curr_date}.sqlite"
     data_db = sqlite3.connect(
         data_db_path,
         detect_types=sqlite3.PARSE_DECLTYPES
