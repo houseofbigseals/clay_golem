@@ -7,7 +7,7 @@ from datetime import datetime
 from click import Tuple
 
 from flaskr.drivers import pwm_lamp_driver, esp32_relay_driver, sba5_driver
-from flaskr.utils.leds_calibration import measure
+#from flaskr.utils.leds_calibration import measure   #check if there is an error!
 from flaskr.utils.logger import Logger
 T = TypeVar('T', bound='Hardware')
 
