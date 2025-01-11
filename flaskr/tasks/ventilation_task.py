@@ -82,6 +82,7 @@ class TaskThread(Thread):
 
     def _write_status(self):
         """Write the current step and timestamp to Redis."""
+        self.redis_client.set(self.TASK_LOCK_KEY, "locked", nx=True, ex=2)
         self.redis_client.set(self.TASK_PARAMS, json.dumps(self.params))
         self.redis_client.set(self.TASK_COMMANDS, json.dumps(self.commands))
         self.redis_client.set(self.TASK_STAGES, json.dumps(self.stages))

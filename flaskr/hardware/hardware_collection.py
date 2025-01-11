@@ -37,35 +37,37 @@ class HardwareCollection:
             self.store_hardware_description_to_redis()
             # also lets create tables in sqlite db
             data_db =  get_data_db()
-            cursor = data_db.cursor()
+            try:
+                cursor = data_db.cursor()
 
-            for device_id in self.hardware:
-                for d in self.hardware[device_id].data:
-                    table_name = f"device_{device_id}_{d}"
-                    cursor.execute(f"""
-                            CREATE TABLE IF NOT EXISTS {table_name} (
-                                num INTEGER PRIMARY KEY AUTOINCREMENT,
-                                datetime TIMESTAMP,
-                                value REAL
-                            )
-                        """)
-                    self.logger.info(f"added sqlite table for device_{device_id}_{d}")
-            # create information table with names for plotting
-            cursor.execute(f"""
-                            CREATE TABLE IF NOT EXISTS device_info (
-                                num INTEGER PRIMARY KEY AUTOINCREMENT,
-                                id INTEGER,
-                                name TEXT,
-                                description TEXT
-                            )
-                        """)
-            # fill it with device names
-            for device_id in self.hardware:
+                for device_id in self.hardware:
+                    for d in self.hardware[device_id].data:
+                        table_name = f"device_{device_id}_{d}"
+                        cursor.execute(f"""
+                                CREATE TABLE IF NOT EXISTS {table_name} (
+                                    num INTEGER PRIMARY KEY AUTOINCREMENT,
+                                    datetime TIMESTAMP,
+                                    value REAL
+                                )
+                            """)
+                        self.logger.info(f"added sqlite table for device_{device_id}_{d}")
+                # create information table with names for plotting
                 cursor.execute(f"""
-                    INSERT INTO device_info (id, name, description) VALUES (?, ?, ?);
-                """, (device_id, self.hardware[device_id].params["name"], self.hardware[device_id].params["description"]))
-            data_db.commit()
-            data_db.close()
+                                CREATE TABLE IF NOT EXISTS device_info (
+                                    num INTEGER PRIMARY KEY AUTOINCREMENT,
+                                    id INTEGER,
+                                    name TEXT,
+                                    description TEXT
+                                )
+                            """)
+                # fill it with device names
+                for device_id in self.hardware:
+                    cursor.execute(f"""
+                        INSERT INTO device_info (id, name, description) VALUES (?, ?, ?);
+                    """, (device_id, self.hardware[device_id].params["name"], self.hardware[device_id].params["description"]))
+                data_db.commit()
+            finally:
+                data_db.close()
         else:
             self.logger.info("we are NOT the first flask instance,so just load data from db")
             self.load_hardware_description_from_redis()
@@ -96,23 +98,24 @@ class HardwareCollection:
         Insert a measurement into the table corresponding to a device.
         """
         data_db = get_data_db()
-        cursor = data_db.cursor()
-        # for d in self.hardware[device_id].data:
-        #     self.logger.debug(f"device_{device_id}   has  {d} data type")
-        for d in self.hardware[device_id].data:
-            table_name = f"device_{device_id}_{d}"
-            measured_value = self.hardware[device_id].data[d]
+        try:
+            cursor = data_db.cursor()
+            # for d in self.hardware[device_id].data:
+            #     self.logger.debug(f"device_{device_id}   has  {d} data type")
+            for d in self.hardware[device_id].data:
+                table_name = f"device_{device_id}_{d}"
+                measured_value = self.hardware[device_id].data[d]
 
-            current_datetime = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+                current_datetime = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
 
-            cursor.execute(f"""
-                INSERT INTO {table_name} (datetime, value)
-                VALUES (?, ?)
-            """, (current_datetime, measured_value))
-            # self.logger.debug(f"loaded {measured_value} to table device_{device_id}_{d}")
-            data_db.commit()
-
-        data_db.close()
+                cursor.execute(f"""
+                    INSERT INTO {table_name} (datetime, value)
+                    VALUES (?, ?)
+                """, (current_datetime, measured_value))
+                # self.logger.debug(f"loaded {measured_value} to table device_{device_id}_{d}")
+                data_db.commit()
+        finally:
+            data_db.close()
 
 
     def length(self):

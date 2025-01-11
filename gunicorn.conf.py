@@ -45,3 +45,5 @@ wsgi_app = 'flaskr:create_app()'
 # errorlog = '-'  # Log to stderr
 
 # You can add more gunicorn configuration options as needed
+max_requests = 1000         # gracefully restart a worker after 1000 requests
+max_requests_jitter = 50    # add random jitter up to 50 requests
